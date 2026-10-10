@@ -1,17 +1,24 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Stack
+
+- Next.js App Router + TypeScript + Tailwind CSS
+- MongoDB (official [`mongodb`](https://www.npmjs.com/package/mongodb) driver) — replaces Supabase
+- No authentication: private single-user dashboard
+
+Data access lives in `src/lib/mongodb.ts` (connection) and `src/lib/db.ts`
+(typed CRUD for `groups` and `skills`). Setup, schema and troubleshooting:
+[`mongodb/README.md`](mongodb/README.md).
+
+**Cara pakai lengkap + penjelasan tiap menu:** [`docs/PANDUAN.md`](docs/PANDUAN.md).
+
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
+cp .env.example .env.local   # set MONGODB_URI
+npm run db:init              # create collections + indexes
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.

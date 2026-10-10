@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party assets (particles.js by Vincent Garreau, MIT) and
+    // static files served from `public/` — not our source.
+    "particles.js-master/**",
+    "public/**",
   ]),
 ]);
 

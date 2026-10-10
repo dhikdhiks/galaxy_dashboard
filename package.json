@@ -6,9 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:init": "node --env-file-if-exists=.env.local mongodb/init.mjs",
+    "db:seed": "node --env-file-if-exists=.env.local mongodb/seed.mjs"
   },
   "dependencies": {
+    "lucide-react": "^1.54.0",
+    "mongodb": "^7.7.0",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
