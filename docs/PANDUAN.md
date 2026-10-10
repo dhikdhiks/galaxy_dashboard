@@ -234,31 +234,36 @@ Tombol toggle di kanan atas: **◎ Galaxy** / **☰ List**.
 
 - Posisi awal memakai **spiral sudut emas** (`golden angle`), deterministik —
   bukan acak. Data yang sama selalu menghasilkan tata letak yang sama.
-- Begitu kamu **menggeser sebuah ikon**, posisi itu ditulis ke database
-  (`skills.position`) sebagai persentase lebar/tinggi bidang — jadi **tersimpan
-  lintas device dan bertahan setelah refresh**. Ikon yang tidak pernah digeser
-  tetap ikut spiral.
+- Begitu kamu **menggeser sebuah ikon**, posisinya diingat **selama halaman ini
+  terbuka** (state komponen, dalam persentase lebar/tinggi bidang). Ikon yang
+  tidak pernah digeser tetap ikut spiral.
+- **Tidak ada data yang disimpan** — bukan ke database, bukan juga ke
+  localStorage. Posisi murni urusan tampilan. **Reload atau pindah halaman =
+  semua ikon kembali ke spiral.**
 - Skill baru selalu masuk lewat spiral dulu, baru kamu atur sendiri kalau mau.
 - Tombol **⟲ Reset layout** muncul kalau ada minimal satu posisi manual —
-  satu klik mengembalikan **semuanya** ke spiral (bukan acak).
+  satu klik mengembalikan **semuanya** ke spiral (bukan acak) saat itu juga.
 - **Otomatis pindah ke tampilan List** kalau skill lebih dari **24** — area
   galaksi jadi terlalu padat. Kamu tetap bisa menekan **Galaxy** untuk memaksa
   kembali.
+
+> Catatan: karena posisi hanya tampilan, halaman yang di-reload akan menampilkan
+> tata letak spiral lagi — itu wajar, bukan kerusakan.
 
 **Interaksi ikon**
 
 | Aksi | Hasil |
 |---|---|
 | Hover / focus | Ikon membesar dengan cincin cyan + glow, muncul label (nama + progress) |
-| **Geser (drag)** | Ikon ikut kursor, dibekukan saat digeser, lalu posisinya **disimpan**. Kursor berubah jadi tangan 🖐 |
+| **Geser (drag)** | Ikon ikut kursor, dibekukan saat digeser, lalu posisinya **diingat selama halaman ini terbuka**. Kursor berubah jadi tangan 🖐 |
 | Klik (tanpa digerakkan) | Membuka URL skill di tab baru |
 | Klik setelah geser | Tidak membuka tab — drag bukan klik |
 
 - Ambang pembeda drag vs klik hanya **4px**, jadi klik biasa tetap terasa wajar.
 - Ikon dijepit di dalam bidang supaya tidak pernah setengah keluar, dan
   mengangkat dirinya ke atas (`z-index`) selama digeser.
-- Muncul indikator kecil di atas: `Saving…` → `Layout saved`. Kalau gagal,
-  `Couldn't save layout` muncul merah dan bertahan sampai percobaan berikutnya.
+- **Tidak ada indikator "menyimpan"** — memang tidak ada yang disimpan. Posisi
+  hanya hidup selama halaman terbuka.
 - **Sentuhan layar** juga bisa menggeser (`touch-action: none`), tapi karenanya
   menyentuh persis ikon tidak ikut men-scroll halaman — gunakan celah di
   antara ikon atau tampilan List.
@@ -408,7 +413,6 @@ sparkle  star     target   terminal video    wand     wrench   zap
 | `status` | string | Salah satu dari 4 status |
 | `progress` | number | 0–100 |
 | `sortOrder` | number | Urutan tampil |
-| `position` | `{x,y}` \| null | Posisi hasil geser, dalam **%** bidang galaksi. `null` = pakai spiral |
 | `createdAt`, `updatedAt` | Date | |
 
 ### Index (dibuat `npm run db:init`)

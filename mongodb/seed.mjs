@@ -157,7 +157,6 @@ try {
             status: skill.status,
             progress: skill.progress,
             sortOrder: index,
-            position: null, // filled in later by dragging a chip in the galaxy
             createdAt: now,
             updatedAt: now,
           },

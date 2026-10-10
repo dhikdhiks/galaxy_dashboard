@@ -86,16 +86,16 @@ status, names, order — is left untouched.
   "status": "learning",         // not_started | learning | practiced | mastered
   "progress": 40,               // integer 0-100, set manually
   "sortOrder": 0,
-  "position": { "x": 55, "y": 44 },  // centre in % of the galaxy field, or
-                                     // null → the golden-angle spiral decides
   "createdAt": ISODate("..."),
   "updatedAt": ISODate("...")
 }
 ```
 
-`position` is written by dragging a chip on `/groups/[slug]` and is cleared by
-that screen's **Reset layout** button. It is `null` (or absent on documents
-written before the field existed) until you place an icon by hand.
+Hand-placed icon layouts are **not stored at all**. Dragging a chip on
+`/groups/[slug]` only moves it in that page's component state — nothing is
+written to MongoDB (or to localStorage) — and reloading the page puts every
+chip back on the golden-angle spiral. The database only ever holds the
+skill's content.
 
 Deleting a group also deletes its skills (handled in `src/lib/db.ts`).
 

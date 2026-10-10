@@ -18,17 +18,6 @@ export interface Group {
   updatedAt: Date;
 }
 
-/**
- * Centre of a chip inside the galaxy field, as a percentage of the field's
- * width/height (0–100). Percentages — not pixels — so a saved layout survives
- * every screen size. `null` means "not placed by hand": the golden-angle
- * spiral decides instead.
- */
-export interface SkillPosition {
-  x: number;
-  y: number;
-}
-
 export interface Skill {
   id: string;
   groupId: string;
@@ -39,7 +28,6 @@ export interface Skill {
   status: SkillStatus;
   progress: number;
   sortOrder: number;
-  position: SkillPosition | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,7 +49,6 @@ export interface SkillInput {
   status?: SkillStatus;
   progress?: number;
   sortOrder?: number;
-  position?: SkillPosition | null;
 }
 
 /** Thrown for invalid user input so route handlers can return a 400. */

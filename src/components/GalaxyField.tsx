@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   ExternalLink,
   LayoutGrid,
@@ -9,10 +9,6 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-import {
-  resetGroupPositionsAction,
-  saveSkillPositionAction,
-} from "@/app/admin/actions";
 import { ProgressBar } from "@/components/ProgressBar";
 import { SkillStatusBadge } from "@/components/SkillStatusBadge";
 import { Glyph, iconFor } from "@/components/icons";
@@ -23,14 +19,12 @@ type ViewMode = "galaxy" | "list";
 /** Chip centre as a percentage of the galaxy field's width/height. */
 type Pos = { left: number; top: number };
 
-type SaveState = "idle" | "saving" | "saved" | "error";
-
 /** Per-gesture bookkeeping, held in a ref so it survives re-renders. */
 type Gesture = {
   pointerId: number;
   startX: number;
   startY: number;
-  /** Layout position at the moment the pointer went down. */
+  /** Layout position (in %) at the moment the pointer went down. */
   origin: Pos;
   /** Field rectangle, captured once — a mid-drag resize must not jump the chip. */
   rect: DOMRect;
@@ -44,25 +38,18 @@ const GALAXY_LIMIT = 24;
 const DRAG_THRESHOLD = 4;
 
 /**
- * Chip is 56px across, plus headroom for the drift at its widest, so a
- * hand-placed icon can never end up half outside the field.
+ * Chip is 56px across, plus headroom for the drift at its widest. `positionAt`
+ * converts this pixel cushion to a percentage of the field, so a hand-placed
+ * icon can never end up half outside.
  */
 const EDGE_PADDING = 38;
-
-const SAVE_LABEL: Record<SaveState, string> = {
-  idle: "",
-  saving: "Saving…",
-  saved: "Layout saved",
-  error: "Couldn't save layout",
-};
 
 /**
  * Deterministic layout: a golden-angle spiral. Same skill set always produces
  * the same positions (never randomize on render, per the design system), and
  * the sqrt radius keeps neighbouring chips from colliding.
  *
- * This is only the *default* — dragging a chip writes its own position to
- * MongoDB, which takes precedence from then on.
+ * This is the default for every chip the user has not dragged somewhere.
  */
 function spiralPosition(index: number, total: number): Pos {
   if (total <= 1) return { left: 50, top: 50 };
@@ -111,47 +98,23 @@ export function GalaxyField({ skills }: { skills: Skill[] }) {
   const [view, setView] = useState<ViewMode>(initial);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Hand-placed layouts, keyed by skill id. Seeded once from the database;
-  // skills without one fall back to `spiralPosition`.
-  const [overrides, setOverrides] = useState<Record<string, Pos>>(() => {
-    const seeded: Record<string, Pos> = {};
-    for (const skill of skills) {
-      if (skill.position) {
-        seeded[skill.id] = { left: skill.position.x, top: skill.position.y };
-      }
-    }
-    return seeded;
-  });
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-
-  // Confirmation text shouldn't linger forever; failures stay until fixed.
-  useEffect(() => {
-    if (saveState !== "saved") return;
-    const timer = setTimeout(() => setSaveState("idle"), 2500);
-    return () => clearTimeout(timer);
-  }, [saveState]);
+  // Hand-placed positions are display-only: they live in this component's
+  // state, so a chip stays where you dropped it for as long as the page is
+  // open. Nothing is written — not to MongoDB, not to localStorage — and a
+  // reload puts every chip back on the spiral.
+  const [overrides, setOverrides] = useState<Record<string, Pos>>({});
 
   const handleMove = (id: string, pos: Pos) => {
     setOverrides((previous) => ({ ...previous, [id]: pos }));
   };
 
-  const handleDrop = async (id: string, pos: Pos) => {
-    setSaveState("saving");
-    const result = await saveSkillPositionAction(id, pos.left, pos.top);
-    setSaveState(result.status === "success" ? "saved" : "error");
+  const handleDrop = (id: string, pos: Pos) => {
+    // Same as a move: there is nothing to persist, so the final pointer
+    // position simply becomes the chip's committed position.
+    setOverrides((previous) => ({ ...previous, [id]: pos }));
   };
 
-  const handleReset = async () => {
-    const groupId = skills[0]?.groupId;
-    if (!groupId) return;
-    const result = await resetGroupPositionsAction(groupId);
-    if (result.status === "success") {
-      setOverrides({});
-      setSaveState("idle");
-    } else {
-      setSaveState("error");
-    }
-  };
+  const handleReset = () => setOverrides({});
 
   const hasOverrides = Object.keys(overrides).length > 0;
 
@@ -214,20 +177,6 @@ export function GalaxyField({ skills }: { skills: Skill[] }) {
         </p>
 
         <div className="flex items-center gap-2.5">
-          <span
-            role="status"
-            aria-live="polite"
-            className={`text-xs ${
-              saveState === "idle"
-                ? "hidden"
-                : saveState === "error"
-                  ? "text-danger"
-                  : "text-muted"
-            }`}
-          >
-            {SAVE_LABEL[saveState]}
-          </span>
-
           {view === "galaxy" && hasOverrides ? (
             <button
               type="button"
@@ -300,16 +249,26 @@ function SkillChip({
   const suppressClick = useRef(false);
   const [dragging, setDragging] = useState(false);
 
-  /** Field position for a pointer, clamped so the chip stays fully inside. */
+  /**
+   * Field position for a pointer, in the same percentage units the chip's
+   * `left`/`top` styles use: the origin (already %) plus the pointer delta
+   * expressed as a fraction of the field. Mixed units here are exactly what
+   * used to fling icons off-screen.
+   */
   const positionAt = (g: Gesture, clientX: number, clientY: number): Pos => {
-    const clamp = (value: number, extent: number) =>
-      Math.min(
-        Math.max(value, EDGE_PADDING),
-        Math.max(EDGE_PADDING, extent - EDGE_PADDING),
-      );
+    const padX = (EDGE_PADDING / g.rect.width) * 100;
+    const padY = (EDGE_PADDING / g.rect.height) * 100;
+    const clamp = (value: number, pad: number) =>
+      Math.min(Math.max(value, pad), Math.max(pad, 100 - pad));
     return {
-      left: clamp((g.origin.left / 100) * g.rect.width + clientX - g.startX, g.rect.width),
-      top: clamp((g.origin.top / 100) * g.rect.height + clientY - g.startY, g.rect.height),
+      left: clamp(
+        g.origin.left + ((clientX - g.startX) / g.rect.width) * 100,
+        padX,
+      ),
+      top: clamp(
+        g.origin.top + ((clientY - g.startY) / g.rect.height) * 100,
+        padY,
+      ),
     };
   };
 
@@ -378,7 +337,7 @@ function SkillChip({
       target="_blank"
       rel="noopener noreferrer"
       draggable={false}
-      // Positions are percentages, so a saved layout survives any screen size.
+      // Positions are percentages, so a dragged layout survives any screen size.
       style={{
         left: `${position.left}%`,
         top: `${position.top}%`,

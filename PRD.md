@@ -32,7 +32,7 @@ Skill Galaxy is a private personal learning dashboard that centralizes documenta
 - Icon rings are transparent so the starfield shows through behind them
 - Click skill to open its configured URL in a safe new tab
 - Reveal name, description and status on focus/hover/tap
-- Drag an icon to rearrange it; the hand-placed position persists per skill
+- Drag an icon to rearrange it for the current page view (not persisted)
 - Offer a one-click reset back to the automatic spiral layout
 - Back-to-overview and previous/next group navigation
 - When a group is crowded, provide list/grid fallback; test at 40+ skills
@@ -101,8 +101,9 @@ Allowed statuses: `not_started`, `learning`, `practiced`, `mastered`. Progress i
 11. A group with 40 skills remains navigable using floating and list/grid views.
 12. Lint, type-check and production build are run and results reported accurately.
 13. No secrets are committed.
-14. A dragged icon keeps its position after a refresh and on another device.
+14. Dragging an icon moves it for the current page view; nothing is persisted.
 15. Resetting the layout restores the deterministic spiral, not randomness.
+16. Dragging never writes to a database or to browser storage — display only.
 
 ## 10. Success measures
 - Resource opens in two clicks or fewer from overview.
