@@ -225,25 +225,43 @@ Tombol toggle di kanan atas: **◎ Galaxy** / **☰ List**.
 
 | | Galaxy | List |
 |---|---|---|
-| Tampilan | Ikon bulatan tersebar | Baris rapi dengan info lengkap |
-| Posisi | Spiral sudut emas — selalu sama untuk data yang sama | Urut sesuai `sortOrder` lalu nama |
+| Tampilan | Ikon bulatan **berlatar transparan** — bintang di belakang menembus cincinnya | Baris rapi dengan info lengkap |
+| Posisi | Spiral sudut emas, kecuali yang sudah kamu geser sendiri | Urut sesuai `sortOrder` lalu nama |
 | Label | Muncul saat hover/focus | Selalu terlihat |
 | Info | Nama + progress | Nama, URL, deskripsi, progress bar, badge status, persentase |
 
 **Tata letak galaksi**
 
-- Posisi memakai **spiral sudut emas** (`golden angle`), deterministik — bukan
-  acak. Data yang sama selalu menghasilkan tata letak yang sama.
+- Posisi awal memakai **spiral sudut emas** (`golden angle`), deterministik —
+  bukan acak. Data yang sama selalu menghasilkan tata letak yang sama.
+- Begitu kamu **menggeser sebuah ikon**, posisi itu ditulis ke database
+  (`skills.position`) sebagai persentase lebar/tinggi bidang — jadi **tersimpan
+  lintas device dan bertahan setelah refresh**. Ikon yang tidak pernah digeser
+  tetap ikut spiral.
+- Skill baru selalu masuk lewat spiral dulu, baru kamu atur sendiri kalau mau.
+- Tombol **⟲ Reset layout** muncul kalau ada minimal satu posisi manual —
+  satu klik mengembalikan **semuanya** ke spiral (bukan acak).
 - **Otomatis pindah ke tampilan List** kalau skill lebih dari **24** — area
-  galaksi jadi terlalu padat.
-- Kamu tetap bisa menekan **Galaxy** untuk memaksa kembali.
+  galaksi jadi terlalu padat. Kamu tetap bisa menekan **Galaxy** untuk memaksa
+  kembali.
 
 **Interaksi ikon**
 
 | Aksi | Hasil |
 |---|---|
-| Hover / focus | Ikon membesar, muncul label (nama + progress) |
-| Klik | Membuka URL skill di tab baru |
+| Hover / focus | Ikon membesar dengan cincin cyan + glow, muncul label (nama + progress) |
+| **Geser (drag)** | Ikon ikut kursor, dibekukan saat digeser, lalu posisinya **disimpan**. Kursor berubah jadi tangan 🖐 |
+| Klik (tanpa digerakkan) | Membuka URL skill di tab baru |
+| Klik setelah geser | Tidak membuka tab — drag bukan klik |
+
+- Ambang pembeda drag vs klik hanya **4px**, jadi klik biasa tetap terasa wajar.
+- Ikon dijepit di dalam bidang supaya tidak pernah setengah keluar, dan
+  mengangkat dirinya ke atas (`z-index`) selama digeser.
+- Muncul indikator kecil di atas: `Saving…` → `Layout saved`. Kalau gagal,
+  `Couldn't save layout` muncul merah dan bertahan sampai percobaan berikutnya.
+- **Sentuhan layar** juga bisa menggeser (`touch-action: none`), tapi karenanya
+  menyentuh persis ikon tidak ikut men-scroll halaman — gunakan celah di
+  antara ikon atau tampilan List.
 
 Ikon tidak pernah menampilkan SVG mentah dari database — hanya **identifier**
 yang dipetakan ke whitelist ikon. Kalau identifier tidak dikenal, ikon cadangan
@@ -390,6 +408,7 @@ sparkle  star     target   terminal video    wand     wrench   zap
 | `status` | string | Salah satu dari 4 status |
 | `progress` | number | 0–100 |
 | `sortOrder` | number | Urutan tampil |
+| `position` | `{x,y}` \| null | Posisi hasil geser, dalam **%** bidang galaksi. `null` = pakai spiral |
 | `createdAt`, `updatedAt` | Date | |
 
 ### Index (dibuat `npm run db:init`)
@@ -432,15 +451,28 @@ Garreau) yang di-vendor di `particles.js-master/`, build min-nya disalin ke
 
 ### Drift ikon skill
 
-Setiap ikon di galaksi memiliki **jam masing-masing** — amplitudo, kecepatan, dan
-titik mulai berbeda, diturunkan dari indeks memakai sudut emas yang sama dengan
-tata letaknya (deterministik, tanpa `Math.random`):
+Setiap ikon bergerak di atas **dua jam terpisah**, masing-masing diturunkan dari
+indeks memakai sudut emas yang sama dengan tata letaknya (deterministik, tanpa
+`Math.random`):
 
-| Parameter | Rentang |
-|---|---|
-| Amplitudo | 6–12px |
-| Durasi | 4,5–8 detik |
-| Fase | `animation-delay` negatif, berbeda tiap ikon |
+| Parameter | Rentang | Keterangan |
+|---|---|---|
+| Amplitudo vertikal | 10–24px | Ayunan naik-turun |
+| Durasi vertikal | 3–6 detik | `transform: translateY()` |
+| Amplitudo horizontal | 3–8px | Geser halus kiri-kanan |
+| Durasi horizontal | 4–8 detik | `translateX()`, sengaja di luar irama vertikal |
+| Fase | `animation-delay` negatif, dua nilai | Berbeda tiap ikon, dan tiap sumbu |
+
+Karena kedua sumbu memakai **properti CSS yang berbeda** (`transform` vs
+`translate`) dan durasinya berbeda, gerakannya saling melengkapi dan tidak
+pernah terlihat berulang.
+
+Saat ikon **digeser**, drift-nya dibekukan (`animation-play-state: paused`)
+supaya tidak mengambang keluar dari bawah kursor; dilepas lagi persis dari
+frame yang sama, jadi tidak ada lompatan.
+
+Sesuai tabel sebelumnya, radius amplitudo disetel di `floatStyle()` dalam
+`src/components/GalaxyField.tsx`.
 
 ### Menghormati preferensi gerak
 

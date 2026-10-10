@@ -7,6 +7,7 @@ import {
   SKILL_STATUSES,
   Skill,
   SkillInput,
+  SkillPosition,
   SkillStatus,
   ValidationError,
 } from "./types";
@@ -38,6 +39,7 @@ interface SkillDoc {
   status: SkillStatus;
   progress: number;
   sortOrder: number;
+  position: SkillPosition | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -56,8 +58,15 @@ function toGroup(doc: WithId<GroupDoc>): Group {
 }
 
 function toSkill(doc: WithId<SkillDoc>): Skill {
-  const { _id, groupId, ...rest } = doc;
-  return { id: _id.toHexString(), groupId: groupId.toHexString(), ...rest };
+  const { _id, groupId, position, ...rest } = doc;
+  return {
+    id: _id.toHexString(),
+    groupId: groupId.toHexString(),
+    ...rest,
+    // Documents written before dragging existed have no `position` at all;
+    // treat that exactly like an explicit `null` — the spiral takes over.
+    position: position ?? null,
+  };
 }
 
 function toObjectId(value: string, label: string): ObjectId {
@@ -123,6 +132,27 @@ function normalizeSortOrder(value: number | undefined | null): number {
   if (value === undefined || value === null) return 0;
   const order = Math.round(Number(value));
   return Number.isFinite(order) ? order : 0;
+}
+/**
+ * Dragged layouts are stored as percentages of the galaxy field. Values are
+ * clamped rather than rejected so a slightly stale rectangle (from a resize
+ * mid-drag) can never fail the save.
+ */
+function normalizePosition(
+  value: SkillPosition | null | undefined,
+): SkillPosition | null {
+  if (value === undefined || value === null) return null;
+  const { x, y } = value;
+  if (
+    typeof x !== "number" ||
+    typeof y !== "number" ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y)
+  ) {
+    throw new ValidationError("Position must be two finite numbers");
+  }
+  const clamp = (n: number) => Math.min(100, Math.max(0, n));
+  return { x: clamp(x), y: clamp(y) };
 }
 
 async function assertUniqueSlug(
@@ -313,6 +343,7 @@ export async function createSkill(input: SkillInput): Promise<Skill> {
     status: normalizeStatus(input.status),
     progress: normalizeProgress(input.progress),
     sortOrder: normalizeSortOrder(input.sortOrder),
+    position: normalizePosition(input.position),
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -347,6 +378,7 @@ export async function updateSkill(
   if (patch.status !== undefined) updates.status = normalizeStatus(patch.status);
   if (patch.progress !== undefined) updates.progress = normalizeProgress(patch.progress);
   if (patch.sortOrder !== undefined) updates.sortOrder = normalizeSortOrder(patch.sortOrder);
+  if (patch.position !== undefined) updates.position = normalizePosition(patch.position);
 
   const updated = await collection.findOneAndUpdate(
     { _id },
@@ -355,6 +387,21 @@ export async function updateSkill(
   );
   if (!updated) throw new ValidationError("Skill not found");
   return toSkill(updated);
+}
+
+/**
+ * Drops every hand-placed layout in a group so chips fall back to the
+ * golden-angle spiral. Returns how many chips were actually reset — skills
+ * that were never dragged are left alone.
+ */
+export async function resetGroupPositions(groupId: string): Promise<number> {
+  const _id = toObjectId(groupId, "group id");
+  const result = await (await skills()).updateMany(
+    // `$ne: null` also skips documents written before `position` existed.
+    { groupId: _id, position: { $ne: null } },
+    { $set: { position: null, updatedAt: new Date() } },
+  );
+  return result.modifiedCount;
 }
 
 export async function deleteSkill(id: string): Promise<void> {

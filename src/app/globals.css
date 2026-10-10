@@ -114,12 +114,24 @@ body {
 }
 
 /**
- * Each chip drifts on its own clock. `--float-amp` is read by the keyframes so
- * travel distance can vary per chip; duration/delay are set inline instead.
+ * Each chip drifts on two independent clocks.
+ *
+ *   float-soft  → vertical, on `transform`
+ *   float-drift → horizontal, on `translate`
+ *
+ * They ride two *different* CSS transform properties, so they compose instead
+ * of clobbering each other, and different durations mean the combined path
+ * never visibly repeats. Amplitude/duration are injected per chip through
+ * `--float-amp(-x)` / `--float-dur(-x)` by `floatStyle()` in GalaxyField.
  */
 @keyframes float-soft {
-  from { transform: translateY(calc(var(--float-amp, 7px) * -1)); }
-  to { transform: translateY(var(--float-amp, 7px)); }
+  from { transform: translateY(calc(var(--float-amp, 14px) * -1)); }
+  to { transform: translateY(var(--float-amp, 14px)); }
+}
+
+@keyframes float-drift {
+  from { translate: calc(var(--float-amp-x, 6px) * -1); }
+  to { translate: var(--float-amp-x, 6px); }
 }
 
 @keyframes orbit-pulse {
@@ -128,7 +140,15 @@ body {
 }
 
 .animate-float {
-  animation: float-soft 5s ease-in-out infinite alternate;
+  animation:
+    float-soft var(--float-dur, 4.5s) ease-in-out infinite alternate,
+    float-drift var(--float-dur-x, 7s) ease-in-out infinite alternate;
+}
+
+/* Frozen mid-air while a pointer owns the chip, so it can't bob out from
+   under the cursor mid-drag. Releasing continues from the same frame. */
+.chip-dragging .animate-float {
+  animation-play-state: paused;
 }
 
 .animate-pulse-ring {
