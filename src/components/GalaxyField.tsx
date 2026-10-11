@@ -1,20 +1,39 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ExternalLink,
   LayoutGrid,
   List,
   Orbit,
+  Pencil,
   RotateCcw,
 } from "lucide-react";
 
+import { deleteSkillAction } from "@/app/admin/actions";
+import { DeleteButton } from "@/components/admin/DeleteButton";
 import { ProgressBar } from "@/components/ProgressBar";
 import { SkillStatusBadge } from "@/components/SkillStatusBadge";
-import { Glyph, iconFor } from "@/components/icons";
-import type { Skill } from "@/lib/types";
+import { Icon } from "@/components/icons";
+import { SKILL_STATUSES, type Skill, type SkillStatus } from "@/lib/types";
 
 type ViewMode = "galaxy" | "list";
+
+/** Status filter options for the chip row. */
+const STATUS_FILTERS: { value: SkillStatus | "all"; label: string }[] = [
+  { value: "all", label: "All" },
+  ...SKILL_STATUSES.map((status) => ({
+    value: status,
+    label:
+      status === "not_started"
+        ? "Not started"
+        : status === "learning"
+          ? "Learning"
+          : status === "practiced"
+            ? "Practiced"
+            : "Mastered",
+  })),
+];
 
 /** Chip centre as a percentage of the galaxy field's width/height. */
 type Pos = { left: number; top: number };
@@ -93,10 +112,30 @@ function floatStyle(index: number): React.CSSProperties {
   } as React.CSSProperties;
 }
 
-export function GalaxyField({ skills }: { skills: Skill[] }) {
+export function GalaxyField({
+  skills,
+  onEditSkill,
+}: {
+  skills: Skill[];
+  /** When provided, list rows get edit/delete controls (group page). */
+  onEditSkill?: (skill: Skill) => void;
+}) {
   const initial: ViewMode = skills.length > GALAXY_LIMIT ? "list" : "galaxy";
   const [view, setView] = useState<ViewMode>(initial);
+  const [statusFilter, setStatusFilter] = useState<SkillStatus | "all">(
+    "all",
+  );
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Filtering is client-side: the skill set is small enough
+  // that a refetch would cost more than it saves.
+  const visibleSkills = useMemo(
+    () =>
+      statusFilter === "all"
+        ? skills
+        : skills.filter((skill) => skill.status === statusFilter),
+    [skills, statusFilter],
+  );
 
   // Hand-placed positions are display-only: they live in this component's
   // state, so a chip stays where you dropped it for as long as the page is
@@ -161,8 +200,7 @@ export function GalaxyField({ skills }: { skills: Skill[] }) {
           No skills in this group yet
         </p>
         <p className="max-w-sm text-sm leading-6 text-muted">
-          Add the first resource from the admin panel — it will float here as a
-          clickable icon.
+          Add the first resource above — it will float here as a clickable icon.
         </p>
       </div>
     );
@@ -170,25 +208,54 @@ export function GalaxyField({ skills }: { skills: Skill[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-muted">
-          {skills.length} {skills.length === 1 ? "skill" : "skills"} · drag an
-          icon to rearrange, click to open
-        </p>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-muted">
+            {visibleSkills.length === skills.length
+              ? `${skills.length} ${skills.length === 1 ? "skill" : "skills"}`
+              : `${visibleSkills.length} of ${skills.length} skills`}
+            {" · "}drag an icon to rearrange, click to open
+            {onEditSkill && view === "galaxy"
+              ? " · switch to List to edit or delete"
+              : ""}
+          </p>
 
-        <div className="flex items-center gap-2.5">
-          {view === "galaxy" && hasOverrides ? (
+          <div className="flex items-center gap-2.5">
+            {view === "galaxy" && hasOverrides ? (
+              <button
+                type="button"
+                onClick={handleReset}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-purple/50 hover:text-foreground"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                Reset layout
+              </button>
+            ) : null}
+
+            {toggle}
+          </div>
+        </div>
+
+        <div
+          role="group"
+          aria-label="Filter skills by status"
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          {STATUS_FILTERS.map((filter) => (
             <button
+              key={filter.value}
               type="button"
-              onClick={handleReset}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-purple/50 hover:text-foreground"
+              onClick={() => setStatusFilter(filter.value)}
+              aria-pressed={statusFilter === filter.value}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                statusFilter === filter.value
+                  ? "border-purple/60 bg-purple-strong/15 text-purple"
+                  : "border-border text-muted hover:text-foreground"
+              }`}
             >
-              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-              Reset layout
+              {filter.label}
             </button>
-          ) : null}
-
-          {toggle}
+          ))}
         </div>
       </div>
 
@@ -198,15 +265,14 @@ export function GalaxyField({ skills }: { skills: Skill[] }) {
           className="surface relative h-[440px] w-full overflow-hidden rounded-2xl sm:h-[520px]"
           aria-label="Skill galaxy"
         >
-          {skills.map((skill, index) => {
+          {visibleSkills.map((skill, index) => {
             const position =
-              overrides[skill.id] ?? spiralPosition(index, skills.length);
-            const Icon = iconFor(skill.icon);
+              overrides[skill.id] ??
+              spiralPosition(index, visibleSkills.length);
             return (
               <SkillChip
                 key={skill.id}
                 skill={skill}
-                Icon={Icon}
                 position={position}
                 floatStyle={floatStyle(index)}
                 containerRef={containerRef}
@@ -218,18 +284,27 @@ export function GalaxyField({ skills }: { skills: Skill[] }) {
         </div>
       ) : (
         <ul className="flex flex-col gap-2.5">
-          {skills.map((skill) => (
-            <SkillRow key={skill.id} skill={skill} />
+          {visibleSkills.map((skill) => (
+            <SkillRow
+              key={skill.id}
+              skill={skill}
+              onEditSkill={onEditSkill}
+            />
           ))}
         </ul>
       )}
+
+      {visibleSkills.length === 0 && skills.length > 0 ? (
+        <p className="surface rounded-xl px-4 py-6 text-center text-sm text-muted">
+          No skills with this status yet.
+        </p>
+      ) : null}
     </div>
   );
 }
 
 function SkillChip({
   skill,
-  Icon,
   position,
   floatStyle,
   containerRef,
@@ -237,7 +312,6 @@ function SkillChip({
   onDrop,
 }: {
   skill: Skill;
-  Icon: ReturnType<typeof iconFor>;
   position: Pos;
   floatStyle: React.CSSProperties;
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -361,7 +435,7 @@ function SkillChip({
         style={floatStyle}
         className="animate-float flex h-14 w-14 items-center justify-center rounded-full border border-border bg-transparent transition-all duration-200 group-hover:border-cyan/70 group-hover:scale-110 group-hover:shadow-[0_0_20px_rgba(103,232,249,0.22)] group-focus-visible:scale-110"
       >
-        <Icon className="h-6 w-6 text-cyan" aria-hidden="true" />
+        <Icon icon={skill.icon} className="h-6 w-6 text-cyan" />
       </span>
 
       {/* Label appears on hover/focus; suppressed mid-drag so it doesn't trail
@@ -384,17 +458,23 @@ function SkillChip({
   );
 }
 
-function SkillRow({ skill }: { skill: Skill }) {
+function SkillRow({
+  skill,
+  onEditSkill,
+}: {
+  skill: Skill;
+  onEditSkill?: (skill: Skill) => void;
+}) {
   return (
-    <li>
+    <li className="surface flex items-center gap-4 rounded-xl px-4 py-3 transition-colors hover:border-purple/50">
       <a
         href={skill.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="surface flex items-center gap-4 rounded-xl px-4 py-3 transition-colors hover:border-purple/50"
+        className="flex min-w-0 flex-1 items-center gap-4"
       >
-        <span className="surface-raised flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
-          <Glyph icon={iconFor(skill.icon)} className="h-5 w-5 text-cyan" />
+        <span className="surface-raised flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+          <Icon icon={skill.icon} className="h-5 w-5 text-cyan" />
         </span>
 
         <span className="min-w-0 flex-1">
@@ -416,14 +496,35 @@ function SkillRow({ skill }: { skill: Skill }) {
             <ProgressBar value={skill.progress} />
           </span>
         </span>
+      </a>
 
+      {onEditSkill ? (
+        <span className="flex shrink-0 items-center gap-2">
+          <SkillStatusBadge status={skill.status} />
+          <button
+            type="button"
+            onClick={() => onEditSkill(skill)}
+            aria-label={`Edit "${skill.name}"`}
+            className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:border-purple/50 hover:text-foreground"
+          >
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+            Edit
+          </button>
+          <DeleteButton
+            action={deleteSkillAction}
+            id={skill.id}
+            label="Delete"
+            confirmMessage={`Delete "${skill.name}"? This cannot be undone.`}
+          />
+        </span>
+      ) : (
         <span className="flex shrink-0 flex-col items-end gap-2">
           <SkillStatusBadge status={skill.status} />
           <span className="text-xs font-medium text-muted tabular-nums">
             {skill.progress}%
           </span>
         </span>
-      </a>
+      )}
     </li>
   );
 }

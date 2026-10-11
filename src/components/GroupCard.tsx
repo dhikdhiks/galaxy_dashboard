@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, Layers } from "lucide-react";
 
 import { ProgressBar } from "@/components/ProgressBar";
-import { Glyph, iconFor } from "@/components/icons";
+import { Icon } from "@/components/icons";
 import type { GroupWithStats } from "@/components/GroupExplorer";
 
 export function GroupCard({ group }: { group: GroupWithStats }) {
@@ -17,8 +17,8 @@ export function GroupCard({ group }: { group: GroupWithStats }) {
       />
 
       <div className="relative flex items-start justify-between gap-3">
-        <span className="surface-raised flex h-11 w-11 items-center justify-center rounded-xl">
-          <Glyph icon={iconFor(group.icon)} className="h-5 w-5 text-cyan" />
+        <span className="surface-raised flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl">
+          <Icon icon={group.icon} className="h-5 w-5 text-cyan" />
         </span>
         <ArrowUpRight
           className="h-4 w-4 text-muted transition-colors group-hover:text-purple"

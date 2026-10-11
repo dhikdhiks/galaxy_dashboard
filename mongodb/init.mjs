@@ -31,7 +31,17 @@ try {
     { key: { sortOrder: 1, name: 1 }, name: "skills_sort" },
   ]);
 
-  console.log(`Indexes ready in database "${dbName}" (groups, skills).`);
+  await db.collection("todos").createIndexes([
+    { key: { sortOrder: 1 }, name: "todos_sort" },
+    { key: { archived: 1 }, name: "todos_archived" },
+  ]);
+
+  await db.collection("tasks").createIndexes([
+    { key: { todoId: 1, sortOrder: 1 }, name: "tasks_todo_sort" },
+    { key: { done: 1 }, name: "tasks_done" },
+  ]);
+
+  console.log(`Indexes ready in database "${dbName}" (groups, skills, todos, tasks).`);
 } catch (error) {
   console.error("Failed to initialize MongoDB:", error);
   process.exitCode = 1;

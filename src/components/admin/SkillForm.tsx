@@ -6,7 +6,7 @@ import { LoaderCircle, Plus, X } from "lucide-react";
 
 import { saveSkillAction, type ActionState } from "@/app/admin/actions";
 import { FormStatus, Field, inputClass, textareaClass } from "./fields";
-import { ICON_CHOICES } from "@/components/icons";
+import { IconPicker } from "./IconPicker";
 import { SKILL_STATUSES, type Group, type Skill } from "@/lib/types";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -20,12 +20,17 @@ export function SkillForm({
   skill,
   groups,
   defaultGroupId,
+  fixedGroup,
   onCancel,
+  onSaved,
 }: {
   skill?: Skill;
   groups: Group[];
   defaultGroupId?: string;
+  /** When set, the skill belongs to this group and cannot move. */
+  fixedGroup?: Group;
   onCancel?: () => void;
+  onSaved?: () => void;
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     saveSkillAction,
@@ -39,7 +44,8 @@ export function SkillForm({
   useEffect(() => {
     if (state.status !== "success" || isEdit) return;
     formRef.current?.reset();
-  }, [state, isEdit]);
+    onSaved?.();
+  }, [state, isEdit, onSaved]);
 
   const selectedGroupId = skill?.groupId ?? defaultGroupId ?? groups[0]?.id ?? "";
 
@@ -81,24 +87,33 @@ export function SkillForm({
           />
         </Field>
 
-        <Field label="Group" htmlFor="skill-group">
-          <select
-            id="skill-group"
-            name="groupId"
-            required
-            defaultValue={selectedGroupId}
-            className={inputClass}
-          >
-            {groups.length === 0 ? (
-              <option value="">Create a group first</option>
-            ) : null}
-            {groups.map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {fixedGroup ? (
+          <Field label="Group" htmlFor="skill-group-fixed">
+            <input type="hidden" id="skill-group-fixed" name="groupId" value={fixedGroup.id} />
+            <div className="surface w-full rounded-lg px-3 py-2 text-sm text-muted">
+              {fixedGroup.name}
+            </div>
+          </Field>
+        ) : (
+          <Field label="Group" htmlFor="skill-group">
+            <select
+              id="skill-group"
+              name="groupId"
+              required
+              defaultValue={selectedGroupId}
+              className={inputClass}
+            >
+              {groups.length === 0 ? (
+                <option value="">Create a group first</option>
+              ) : null}
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
       </div>
 
       <Field
@@ -156,20 +171,8 @@ export function SkillForm({
           />
         </Field>
 
-        <Field label="Icon" htmlFor="skill-icon">
-          <select
-            id="skill-icon"
-            name="icon"
-            defaultValue={skill?.icon ?? ""}
-            className={inputClass}
-          >
-            <option value="">Default</option>
-            {ICON_CHOICES.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
+        <Field label="Icon" htmlFor="skill-icon" hint="Bawaan atau upload sendiri">
+          <IconPicker id="skill-icon" name="icon" value={skill?.icon ?? null} />
         </Field>
 
         <Field label="Sort order" htmlFor="skill-order">
@@ -186,7 +189,7 @@ export function SkillForm({
       <div className="flex justify-end">
         <button
           type="submit"
-          disabled={pending || groups.length === 0}
+          disabled={pending || (!fixedGroup && groups.length === 0)}
           className="inline-flex items-center gap-1.5 rounded-full bg-purple-strong px-5 py-2.5 text-sm font-medium text-background transition-colors hover:bg-purple disabled:opacity-60"
         >
           {pending ? (

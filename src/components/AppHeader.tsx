@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { Orbit, Settings } from "lucide-react";
+import { CheckSquare, Orbit, Settings } from "lucide-react";
 
 export function AppHeader({
   current,
 }: {
-  current: "overview" | "group" | "admin";
+  current: "overview" | "group" | "admin" | "todos";
 }) {
   const linkClass = (active: boolean) =>
     `inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
@@ -29,6 +29,11 @@ export function AppHeader({
         <nav className="flex items-center gap-1 sm:gap-2">
           <Link href="/" className={linkClass(current === "overview")}>
             Overview
+          </Link>
+          <Link href="/todos" className={linkClass(current === "todos")}>
+            <CheckSquare className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Todos</span>
+            <span className="sr-only sm:hidden">Todos</span>
           </Link>
           <Link href="/admin" className={linkClass(current === "admin")}>
             <Settings className="h-4 w-4" aria-hidden="true" />

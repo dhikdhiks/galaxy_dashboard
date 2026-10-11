@@ -28,6 +28,8 @@ Skill Galaxy is a private personal learning dashboard that centralizes documenta
 ### Group screen `/groups/[slug]`
 - Dynamic route for every group from database
 - Group name, description, skill count and progress summary
+- Add, edit and delete skills directly here; the group is pre-selected so a new skill never lands in the wrong group
+- Filter the visible skills by status (all / not started / learning / practiced / mastered)
 - Floating skill icons in a visually bounded galaxy canvas
 - Icon rings are transparent so the starfield shows through behind them
 - Click skill to open its configured URL in a safe new tab
@@ -38,12 +40,21 @@ Skill Galaxy is a private personal learning dashboard that centralizes documenta
 - When a group is crowded, provide list/grid fallback; test at 40+ skills
 - Respect reduced-motion settings
 
+### To-dos `/todos`
+- A todo has a title and an optional time
+- Each todo holds any number of tasks; a task can be checked done or back to not done
+- A task can optionally link to a skill or to a group (either may be left empty)
+- Archive a todo to hide it from the active list; restore or delete it from the archived section
+- Manual ordering by dragging the handle, or one-tap "sort by time"
+- Progress bar per todo shows how many tasks are done
+
 ### Admin `/admin`
 - Open without sign-in; the deployment is private and single-user
 - CRUD groups and skills
 - Assign skills to groups
-- Edit name, URL, icon identifier, description, status, progress and order
-- Edit group name, slug, description, icon and order
+- Edit name, URL, icon identifier, description, status and progress
+- Edit group name, slug, description and icon
+- Reorder groups and skills by dragging the handle; the new order is saved to the database
 - Confirm deletion; explain that deleting a group deletes its skills
 - Useful validation and error messages
 
@@ -58,6 +69,10 @@ MongoDB, database `skill_galaxy` (override with `MONGODB_DB`).
 Collection `groups`: `_id`, `name`, `slug` (unique), `description`, `icon`, `sortOrder`, `createdAt`, `updatedAt`.
 
 Collection `skills`: `_id`, `groupId` (references `groups._id`), `name`, `url`, `icon`, `description`, `status`, `progress`, `sortOrder`, `createdAt`, `updatedAt`.
+
+Collection `todos`: `_id`, `title`, `time` (nullable), `sortOrder`, `archived`, `createdAt`, `updatedAt`.
+
+Collection `tasks`: `_id`, `todoId` (references `todos._id`), `label`, `done`, `sortOrder`, `skillId` (nullable, references `skills._id`), `groupId` (nullable, references `groups._id`), `createdAt`, `updatedAt`. Deleting a todo deletes its tasks.
 
 There is no `owner_id`: a single user owns every document.
 
@@ -82,8 +97,10 @@ Allowed statuses: `not_started`, `learning`, `practiced`, `mastered`. Progress i
 ## 8. Performance and accessibility
 - Server Components by default
 - CSS-first animation; no Three.js in v1
+- Cached database reads tagged per collection; mutations invalidate only the affected tags
 - Respect `prefers-reduced-motion`
 - Keyboard operation, visible focus and semantic labels
+- Drag-to-reorder also provides keyboard-accessible move-up/move-down buttons
 - Tooltip cannot be the only way to discover essential information
 - Desktop, tablet and mobile must work
 
@@ -104,6 +121,12 @@ Allowed statuses: `not_started`, `learning`, `practiced`, `mastered`. Progress i
 14. Dragging an icon moves it for the current page view; nothing is persisted.
 15. Resetting the layout restores the deterministic spiral, not randomness.
 16. Dragging never writes to a database or to browser storage — display only.
+17. A skill can be added, edited and deleted from its group page without picking the group manually.
+18. Filtering a group by status shows only skills with that status.
+19. Reordering groups or skills in `/admin` by drag persists after a refresh.
+20. A todo can hold multiple tasks, each toggled done/not-done, and archived/restored.
+21. A task may link to a skill or group, or to neither.
+22. Cached reads are invalidated by the matching mutation, so saves appear immediately.
 
 ## 10. Success measures
 - Resource opens in two clicks or fewer from overview.

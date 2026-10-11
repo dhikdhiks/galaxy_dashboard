@@ -119,3 +119,32 @@ export function Glyph({
 
 /** Identifiers offered in admin forms, sorted for stable UI. */
 export const ICON_CHOICES = Object.keys(ICONS).sort();
+
+/** True when the stored icon is an uploaded image (inline data URL). */
+export function isCustomIcon(
+  icon: string | null | undefined,
+): icon is string {
+  return typeof icon === "string" && icon.startsWith("data:image/");
+}
+
+/**
+ * Renders either the whitelisted glyph or an uploaded image. Custom
+ * images are always circular; the caller's badge provides the size.
+ * `className` styles the glyph, `imgClassName` the image.
+ */
+export function Icon({
+  icon,
+  className,
+  imgClassName = "h-full w-full rounded-full object-cover",
+}: {
+  icon: string | null | undefined;
+  className?: string;
+  imgClassName?: string;
+}) {
+  if (isCustomIcon(icon)) {
+    // Data URLs cannot go through next/image optimization.
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={icon} alt="" aria-hidden="true" className={imgClassName} />;
+  }
+  return <Glyph icon={iconFor(icon)} className={className} />;
+}

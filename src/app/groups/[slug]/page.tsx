@@ -5,10 +5,9 @@ import { connection } from "next/server";
 import { ArrowLeft, ArrowRight, Layers, Pencil } from "lucide-react";
 
 import { AppHeader } from "@/components/AppHeader";
-import { EmptyState } from "@/components/EmptyState";
-import { GalaxyField } from "@/components/GalaxyField";
+import { GroupSkillsSection } from "@/components/GroupSkillsSection";
 import { ProgressBar } from "@/components/ProgressBar";
-import { Glyph, iconFor } from "@/components/icons";
+import { Icon } from "@/components/icons";
 import {
   averageProgress,
   getGroupBySlug,
@@ -93,11 +92,8 @@ async function GroupContent({ group }: { group: Group }) {
         />
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-4">
-            <span className="surface-raised flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl">
-              <Glyph
-                icon={iconFor(group.icon)}
-                className="h-7 w-7 text-cyan"
-              />
+            <span className="surface-raised flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl">
+              <Icon icon={group.icon} className="h-7 w-7 text-cyan" />
             </span>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
@@ -134,7 +130,7 @@ async function GroupContent({ group }: { group: Group }) {
       </header>
 
       <section aria-label="Skills">
-        <GalaxyField skills={skills} />
+        <GroupSkillsSection group={group} skills={skills} />
       </section>
 
       <nav
@@ -171,20 +167,6 @@ async function GroupContent({ group }: { group: Group }) {
         )}
       </nav>
 
-      {skills.length === 0 ? (
-        <EmptyState
-          title="This galaxy is empty"
-          description="Add a skill in the admin panel so this group has something to explore."
-          action={
-            <Link
-              href="/admin"
-              className="inline-flex rounded-full bg-purple-strong px-5 py-2.5 text-sm font-medium text-background hover:bg-purple"
-            >
-              Add a skill
-            </Link>
-          }
-        />
-      ) : null}
     </div>
   );
 }

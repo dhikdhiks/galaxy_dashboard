@@ -3,15 +3,33 @@
 import { useState } from "react";
 import { Pencil, Plus, Settings } from "lucide-react";
 
-import { DeleteButton } from "./DeleteButton";
+import {
+  DeleteButton,
+} from "./DeleteButton";
 import { GroupForm } from "./GroupForm";
 import { SkillForm } from "./SkillForm";
-import { deleteGroupAction, deleteSkillAction } from "@/app/admin/actions";
+import { SortableList } from "@/components/SortableList";
+import {
+  deleteGroupAction,
+  deleteSkillAction,
+  reorderGroupsAction,
+  reorderSkillsAction,
+  type ActionState,
+} from "@/app/admin/actions";
 import { SkillStatusBadge } from "@/components/SkillStatusBadge";
-import { iconFor } from "@/components/icons";
+import { Icon } from "@/components/icons";
 import type { Group, Skill } from "@/lib/types";
 
 type Tab = "groups" | "skills";
+
+/** Persists a manual reorder; failures surface in the console. */
+async function saveOrder(
+  action: (orderedIds: string[]) => Promise<ActionState>,
+  orderedIds: string[],
+) {
+  const state = await action(orderedIds);
+  if (state.status === "error") console.error(state.message);
+}
 
 export function AdminPanel({
   groups,
@@ -96,49 +114,50 @@ export function AdminPanel({
               No groups yet. Create the first one above.
             </p>
           ) : (
-            <ul className="flex flex-col gap-2.5">
-              {groups.map((group) => {
-                const Icon = iconFor(group.icon);
-                return (
-                  <li
-                    key={group.id}
-                    className="surface flex items-center gap-4 rounded-xl px-4 py-3"
-                  >
-                    <span className="surface-raised flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
-                      <Icon className="h-4 w-4 text-cyan" aria-hidden="true" />
+            <SortableList
+              items={groups}
+              label="Groups"
+              describe={(group) => group.name}
+              onReorder={(orderedIds) =>
+                void saveOrder(reorderGroupsAction, orderedIds)
+              }
+            >
+              {(group) => (
+                <>
+                  <span className="surface-raised flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+                    <Icon icon={group.icon} className="h-4 w-4 text-cyan" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">
+                      {group.name}
                     </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-foreground">
-                        {group.name}
-                      </span>
-                      <span className="block truncate text-xs text-muted">
-                        /{group.slug}
-                        {group.description ? ` · ${group.description}` : ""}
-                      </span>
+                    <span className="block truncate text-xs text-muted">
+                      /{group.slug}
+                      {group.description ? ` · ${group.description}` : ""}
                     </span>
-                    <span className="flex shrink-0 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCreatingGroup(false);
-                          setEditingGroupId(group.id);
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-purple/50 hover:text-foreground"
-                      >
-                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        Edit
-                      </button>
-                      <DeleteButton
-                        action={deleteGroupAction}
-                        id={group.id}
-                        label="Delete"
-                        confirmMessage={`Delete "${group.name}"? Every skill in this group will be deleted too. This cannot be undone.`}
-                      />
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+                  </span>
+                  <span className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreatingGroup(false);
+                        setEditingGroupId(group.id);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-purple/50 hover:text-foreground"
+                    >
+                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                      Edit
+                    </button>
+                    <DeleteButton
+                      action={deleteGroupAction}
+                      id={group.id}
+                      label="Delete"
+                      confirmMessage={`Delete "${group.name}"? Every skill in this group will be deleted too. This cannot be undone.`}
+                    />
+                  </span>
+                </>
+              )}
+            </SortableList>
           )}
         </section>
       ) : (
@@ -178,51 +197,52 @@ export function AdminPanel({
                   No skills yet. Create the first one above.
                 </p>
               ) : (
-                <ul className="flex flex-col gap-2.5">
-                  {skills.map((skill) => {
-                    const Icon = iconFor(skill.icon);
-                    return (
-                      <li
-                        key={skill.id}
-                        className="surface flex items-center gap-4 rounded-xl px-4 py-3"
-                      >
-                        <span className="surface-raised flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
-                          <Icon className="h-4 w-4 text-cyan" aria-hidden="true" />
+                <SortableList
+                  items={skills}
+                  label="Skills"
+                  describe={(skill) => skill.name}
+                  onReorder={(orderedIds) =>
+                    void saveOrder(reorderSkillsAction, orderedIds)
+                  }
+                >
+                  {(skill) => (
+                    <>
+                      <span className="surface-raised flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+                        <Icon icon={skill.icon} className="h-4 w-4 text-cyan" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-foreground">
+                          {skill.name}
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-foreground">
-                            {skill.name}
-                          </span>
-                          <span className="block truncate text-xs text-muted">
-                            {groupName(skill.groupId)} · {skill.progress}%
-                          </span>
+                        <span className="block truncate text-xs text-muted">
+                          {groupName(skill.groupId)} · {skill.progress}%
                         </span>
-                        <span className="hidden shrink-0 sm:block">
-                          <SkillStatusBadge status={skill.status} />
-                        </span>
-                        <span className="flex shrink-0 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCreatingSkill(false);
-                              setEditingSkillId(skill.id);
-                            }}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-purple/50 hover:text-foreground"
-                          >
-                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                            Edit
-                          </button>
-                          <DeleteButton
-                            action={deleteSkillAction}
-                            id={skill.id}
-                            label="Delete"
-                            confirmMessage={`Delete "${skill.name}"? This cannot be undone.`}
-                          />
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
+                      </span>
+                      <span className="hidden shrink-0 sm:block">
+                        <SkillStatusBadge status={skill.status} />
+                      </span>
+                      <span className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCreatingSkill(false);
+                            setEditingSkillId(skill.id);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-purple/50 hover:text-foreground"
+                        >
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          Edit
+                        </button>
+                        <DeleteButton
+                          action={deleteSkillAction}
+                          id={skill.id}
+                          label="Delete"
+                          confirmMessage={`Delete "${skill.name}"? This cannot be undone.`}
+                        />
+                      </span>
+                    </>
+                  )}
+                </SortableList>
               )}
             </>
           )}

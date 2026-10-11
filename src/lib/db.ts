@@ -1,3 +1,4 @@
+import { cacheLife, cacheTag } from "next/cache";
 import { Collection, Filter, ObjectId, WithId } from "mongodb";
 
 import { getDb } from "./mongodb";
@@ -8,6 +9,12 @@ import {
   Skill,
   SkillInput,
   SkillStatus,
+  Task,
+  TaskInput,
+  TaskWithLinks,
+  Todo,
+  TodoInput,
+  TodoWithTasks,
   ValidationError,
 } from "./types";
 
@@ -42,12 +49,40 @@ interface SkillDoc {
   updatedAt: Date;
 }
 
+interface TodoDoc {
+  title: string;
+  time: Date | null;
+  sortOrder: number;
+  archived: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface TaskDoc {
+  todoId: ObjectId;
+  label: string;
+  done: boolean;
+  sortOrder: number;
+  skillId: ObjectId | null;
+  groupId: ObjectId | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 async function groups(): Promise<Collection<GroupDoc>> {
   return (await getDb()).collection<GroupDoc>("groups");
 }
 
 async function skills(): Promise<Collection<SkillDoc>> {
   return (await getDb()).collection<SkillDoc>("skills");
+}
+
+async function todos(): Promise<Collection<TodoDoc>> {
+  return (await getDb()).collection<TodoDoc>("todos");
+}
+
+async function tasks(): Promise<Collection<TaskDoc>> {
+  return (await getDb()).collection<TaskDoc>("tasks");
 }
 
 function toGroup(doc: WithId<GroupDoc>): Group {
@@ -58,6 +93,22 @@ function toGroup(doc: WithId<GroupDoc>): Group {
 function toSkill(doc: WithId<SkillDoc>): Skill {
   const { _id, groupId, ...rest } = doc;
   return { id: _id.toHexString(), groupId: groupId.toHexString(), ...rest };
+}
+
+function toTodo(doc: WithId<TodoDoc>): Todo {
+  const { _id, ...rest } = doc;
+  return { id: _id.toHexString(), ...rest };
+}
+
+function toTask(doc: WithId<TaskDoc>): Task {
+  const { _id, todoId, skillId, groupId, ...rest } = doc;
+  return {
+    id: _id.toHexString(),
+    todoId: todoId.toHexString(),
+    skillId: skillId?.toHexString() ?? null,
+    groupId: groupId?.toHexString() ?? null,
+    ...rest,
+  };
 }
 
 function toObjectId(value: string, label: string): ObjectId {
@@ -138,6 +189,9 @@ async function assertUniqueSlug(
 /* ---------------------------------- Groups --------------------------------- */
 
 export async function listGroups(): Promise<Group[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("groups");
   const docs = await (await groups())
     .find({})
     .sort({ sortOrder: 1, name: 1 })
@@ -146,26 +200,41 @@ export async function listGroups(): Promise<Group[]> {
 }
 
 export async function getGroupById(id: string): Promise<Group | null> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("groups");
   const doc = await (await groups()).findOne({ _id: toObjectId(id, "group id") });
   return doc ? toGroup(doc) : null;
 }
 
 export async function getGroupBySlug(slug: string): Promise<Group | null> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("groups");
   const doc = await (await groups()).findOne({ slug });
   return doc ? toGroup(doc) : null;
 }
 
 /**
- * Minimal existence probe for `src/proxy.ts`. Projects only `_id` so it stays
- * cheap enough to run on every `/groups/*` request (the slug index makes it a
- * single indexed point lookup).
+ * Existence probe for `src/proxy.ts` with a short-lived
+ * in-memory cache: the proxy runs on every `/groups/*`
+ * request, and a repeat visit within the TTL skips the
+ * round trip. The TTL is short so a group created
+ * seconds ago still resolves almost immediately.
  */
+const EXISTS_TTL_MS = 5000;
+const existsCache = new Map<string, { at: number; exists: boolean }>();
+
 export async function groupExists(slug: string): Promise<boolean> {
+  const cached = existsCache.get(slug);
+  if (cached && Date.now() - cached.at < EXISTS_TTL_MS) return cached.exists;
   const doc = await (await groups()).findOne(
     { slug },
     { projection: { _id: 1 } },
   );
-  return doc !== null;
+  const exists = doc !== null;
+  existsCache.set(slug, { at: Date.now(), exists });
+  return exists;
 }
 
 export interface GroupStats {
@@ -180,6 +249,10 @@ export interface GroupStats {
  * used by the overview grid.
  */
 export async function listGroupsWithStats(): Promise<GroupStats[]> {
+  "use cache";
+  cacheLife("minutes");
+  // Stats blend group and skill data, so both tags apply.
+  cacheTag("groups", "skills");
   const rows = await (await groups())
     .aggregate<
       Omit<WithId<GroupDoc>, "_id"> & {
@@ -281,6 +354,9 @@ export async function deleteGroup(id: string): Promise<void> {
 /* ---------------------------------- Skills --------------------------------- */
 
 export async function listSkills(groupId?: string): Promise<Skill[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("skills");
   const filter: Filter<SkillDoc> = groupId
     ? { groupId: toObjectId(groupId, "group id") }
     : {};
@@ -292,6 +368,9 @@ export async function listSkills(groupId?: string): Promise<Skill[]> {
 }
 
 export async function getSkillById(id: string): Promise<Skill | null> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("skills");
   const doc = await (await skills()).findOne({ _id: toObjectId(id, "skill id") });
   return doc ? toSkill(doc) : null;
 }
@@ -385,6 +464,9 @@ export interface DashboardSummary {
 
 /** Counts for the overview header. */
 export async function getSummary(): Promise<DashboardSummary> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("groups", "skills");
   const groupCollection = await groups();
   const skillCollection = await skills();
   const [groupCount, skillCount, inProgress, mastered] = await Promise.all([
@@ -399,4 +481,255 @@ export async function getSummary(): Promise<DashboardSummary> {
     inProgress,
     mastered,
   };
+}
+
+/* --------------------------------- Reorder -------------------------------- */
+
+/**
+ * Persists a manual order: `orderedIds[0]` becomes sortOrder 0,
+ * and so on. Every id must belong to the collection, else the
+ * whole write is rejected (partial reorders would corrupt the
+ * order for everyone else).
+ */
+export async function reorderGroups(orderedIds: string[]): Promise<void> {
+  if (orderedIds.length === 0) return;
+  const now = new Date();
+  const result = await (await groups()).bulkWrite(
+    orderedIds.map((id, index) => ({
+      updateOne: {
+        filter: { _id: toObjectId(id, "group id") },
+        update: { $set: { sortOrder: index, updatedAt: now } },
+      },
+    })),
+  );
+  if (result.matchedCount !== orderedIds.length) {
+    throw new ValidationError("Some groups no longer exist");
+  }
+}
+
+export async function reorderSkills(orderedIds: string[]): Promise<void> {
+  if (orderedIds.length === 0) return;
+  const now = new Date();
+  const result = await (await skills()).bulkWrite(
+    orderedIds.map((id, index) => ({
+      updateOne: {
+        filter: { _id: toObjectId(id, "skill id") },
+        update: { $set: { sortOrder: index, updatedAt: now } },
+      },
+    })),
+  );
+  if (result.matchedCount !== orderedIds.length) {
+    throw new ValidationError("Some skills no longer exist");
+  }
+}
+
+/* --------------------------------- To-dos --------------------------------- */
+
+/**
+ * Todos with their tasks, each task enriched with the names of
+ * its optional skill/group links. One round trip per collection —
+ * all four queries run in parallel and are joined in memory.
+ */
+export async function listTodosWithTasks(): Promise<TodoWithTasks[]> {
+  "use cache";
+  cacheLife("minutes");
+  // Task rows carry skill/group names, so all three tags apply.
+  cacheTag("todos", "groups", "skills");
+
+  const [todoDocs, taskDocs, groupDocs, skillDocs] = await Promise.all([
+    (await todos()).find({}).sort({ sortOrder: 1, title: 1 }).toArray(),
+    (await tasks()).find({}).sort({ sortOrder: 1, label: 1 }).toArray(),
+    (await groups())
+      .find({}, { projection: { name: 1, slug: 1 } })
+      .toArray(),
+    (await skills()).find({}, { projection: { name: 1 } }).toArray(),
+  ]);
+
+  const groupLinks = new Map(
+    groupDocs.map((doc) => [
+      doc._id.toHexString(),
+      { name: doc.name, slug: doc.slug },
+    ]),
+  );
+  const skillNames = new Map(
+    skillDocs.map((doc) => [doc._id.toHexString(), doc.name]),
+  );
+
+  const tasksByTodo = new Map<string, TaskWithLinks[]>();
+  for (const doc of taskDocs) {
+    const todoId = doc.todoId.toHexString();
+    const skillId = doc.skillId?.toHexString() ?? null;
+    const groupId = doc.groupId?.toHexString() ?? null;
+    const group = groupId ? groupLinks.get(groupId) : undefined;
+    const task: TaskWithLinks = {
+      id: doc._id.toHexString(),
+      todoId,
+      label: doc.label,
+      done: doc.done,
+      sortOrder: doc.sortOrder,
+      skillId,
+      groupId,
+      skillName: skillId ? (skillNames.get(skillId) ?? null) : null,
+      groupSlug: group?.slug ?? null,
+      groupName: group?.name ?? null,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    };
+    const list = tasksByTodo.get(todoId);
+    if (list) list.push(task);
+    else tasksByTodo.set(todoId, [task]);
+  }
+
+  return todoDocs.map((doc) => {
+    const id = doc._id.toHexString();
+    const taskList = tasksByTodo.get(id) ?? [];
+    return {
+      id,
+      title: doc.title,
+      time: doc.time,
+      sortOrder: doc.sortOrder,
+      archived: doc.archived,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+      tasks: taskList,
+      doneCount: taskList.filter((task) => task.done).length,
+    };
+  });
+}
+
+export async function createTodo(input: TodoInput): Promise<Todo> {
+  const title = requireName(input.title, "Todo title");
+  // New todos append after the existing ones.
+  const count = await (await todos()).countDocuments();
+  const now = new Date();
+  const doc: Omit<TodoDoc, "_id"> = {
+    title,
+    time: input.time ?? null,
+    sortOrder: normalizeSortOrder(input.sortOrder ?? count),
+    archived: input.archived ?? false,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const result = await (await todos()).insertOne(doc);
+  return { id: result.insertedId.toHexString(), ...doc };
+}
+
+export async function updateTodo(
+  id: string,
+  patch: Partial<TodoInput>,
+): Promise<Todo> {
+  const _id = toObjectId(id, "todo id");
+  const collection = await todos();
+  const current = await collection.findOne({ _id });
+  if (!current) throw new ValidationError("Todo not found");
+
+  const updates: Partial<TodoDoc> = { updatedAt: new Date() };
+  if (patch.title !== undefined) {
+    updates.title = requireName(patch.title, "Todo title");
+  }
+  if (patch.time !== undefined) updates.time = patch.time ?? null;
+  if (patch.archived !== undefined) updates.archived = patch.archived;
+  if (patch.sortOrder !== undefined) {
+    updates.sortOrder = normalizeSortOrder(patch.sortOrder);
+  }
+
+  const updated = await collection.findOneAndUpdate(
+    { _id },
+    { $set: updates },
+    { returnDocument: "after" },
+  );
+  if (!updated) throw new ValidationError("Todo not found");
+  return toTodo(updated);
+}
+
+/** Deletes the todo and every task that belongs to it. */
+export async function deleteTodo(id: string): Promise<void> {
+  const _id = toObjectId(id, "todo id");
+  const removed = await (await todos()).deleteOne({ _id });
+  if (removed.deletedCount === 0) throw new ValidationError("Todo not found");
+  await (await tasks()).deleteMany({ todoId: _id });
+}
+
+export async function reorderTodos(orderedIds: string[]): Promise<void> {
+  if (orderedIds.length === 0) return;
+  const now = new Date();
+  const result = await (await todos()).bulkWrite(
+    orderedIds.map((id, index) => ({
+      updateOne: {
+        filter: { _id: toObjectId(id, "todo id") },
+        update: { $set: { sortOrder: index, updatedAt: now } },
+      },
+    })),
+  );
+  if (result.matchedCount !== orderedIds.length) {
+    throw new ValidationError("Some todos no longer exist");
+  }
+}
+
+/**
+ * Resolves an optional skill/group link: empty stays null, an
+ * unknown id is rejected so a typo never silently drops the link.
+ */
+async function resolveOptionalLink(
+  value: string | null | undefined,
+  label: "skill" | "group",
+): Promise<ObjectId | null> {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  const id = toObjectId(raw, `${label} id`);
+  const collection = label === "skill" ? await skills() : await groups();
+  const doc = await collection.findOne({ _id: id }, { projection: { _id: 1 } });
+  if (!doc) throw new ValidationError(`Unknown ${label} link: ${raw}`);
+  return id;
+}
+
+export async function createTask(input: TaskInput): Promise<Task> {
+  const label = requireName(input.label, "Task label");
+  const todoId = toObjectId(input.todoId, "todo id");
+  const todo = await (await todos()).findOne(
+    { _id: todoId },
+    { projection: { _id: 1 } },
+  );
+  if (!todo) throw new ValidationError("Todo not found");
+
+  const skillId = await resolveOptionalLink(input.skillId, "skill");
+  const groupId = await resolveOptionalLink(input.groupId, "group");
+
+  // New tasks append after the todo's existing ones.
+  const count = await (await tasks()).countDocuments({ todoId });
+  const now = new Date();
+  const doc: Omit<TaskDoc, "_id"> = {
+    todoId,
+    label,
+    done: input.done ?? false,
+    sortOrder: normalizeSortOrder(input.sortOrder ?? count),
+    skillId,
+    groupId,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const result = await (await tasks()).insertOne(doc);
+  return toTask({ ...doc, _id: result.insertedId });
+}
+
+export async function toggleTask(id: string): Promise<Task> {
+  const _id = toObjectId(id, "task id");
+  const collection = await tasks();
+  const current = await collection.findOne({ _id });
+  if (!current) throw new ValidationError("Task not found");
+
+  const updated = await collection.findOneAndUpdate(
+    { _id },
+    { $set: { done: !current.done, updatedAt: new Date() } },
+    { returnDocument: "after" },
+  );
+  if (!updated) throw new ValidationError("Task not found");
+  return toTask(updated);
+}
+
+export async function deleteTask(id: string): Promise<void> {
+  const result = await (await tasks()).deleteOne({
+    _id: toObjectId(id, "task id"),
+  });
+  if (result.deletedCount === 0) throw new ValidationError("Task not found");
 }

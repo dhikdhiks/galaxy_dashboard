@@ -32,22 +32,33 @@ declare global {
 
 const PARTICLE_CONFIG = {
   particles: {
-    number: { value: 80, density: { enable: true, value_area: 800 } },
-    // Theme palette: purple / strong purple / blue / cyan.
-    color: { value: ["#a78bfa", "#8b5cf6", "#60a5fa", "#67e8f9"] },
-    shape: { type: "circle", stroke: { width: 0, color: "#000000" } },
-    opacity: { value: 0.5, random: true, anim: { enable: false } },
-    size: { value: 3, random: true, anim: { enable: false } },
+    number: { value: 90, density: { enable: true, value_area: 900 } },
+    // Theme palette: light violet → strong purple → sky blue → cyan.
+    color: { value: ["#c4b5fd", "#a78bfa", "#8b5cf6", "#7dd3fc", "#67e8f9"] },
+    // "circle" is listed twice so most particles stay round and only the
+    // occasional one reads as a sparkle, instead of an even 50/50 mix.
+    shape: { type: ["circle", "circle", "star"], stroke: { width: 0, color: "#000000" } },
+    // Slow twinkle (`speed` is tiny) gives the field depth without the
+    // distracting blink you get from fast opacity animation.
+    opacity: {
+      value: 0.65,
+      random: true,
+      anim: { enable: true, speed: 0.5, opacity_min: 0.12, sync: false },
+    },
+    // Finer, more varied dots read as a distant starfield up close.
+    size: { value: 2.6, random: true, anim: { enable: false } },
     line_linked: {
       enable: true,
-      distance: 150,
+      distance: 130,
       color: "#8b5cf6",
-      opacity: 0.25,
+      opacity: 0.18,
       width: 1,
     },
     move: {
       enable: true,
-      speed: 4,
+      // Calmer drift: the old speed (4) raced across the screen and made
+      // the links flicker instead of float.
+      speed: 1.6,
       direction: "none",
       random: true,
       straight: false,
@@ -67,7 +78,7 @@ const PARTICLE_CONFIG = {
     modes: {
       grab: { distance: 400, line_linked: { opacity: 1 } },
       bubble: { distance: 400, size: 40, duration: 2, opacity: 0.8, speed: 3 },
-      repulse: { distance: 150, duration: 0.4 },
+      repulse: { distance: 140, duration: 0.45 },
       push: { particles_nb: 4 },
       remove: { particles_nb: 2 },
     },

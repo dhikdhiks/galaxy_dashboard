@@ -6,7 +6,7 @@ import { LoaderCircle, Plus, X } from "lucide-react";
 
 import { saveGroupAction, type ActionState } from "@/app/admin/actions";
 import { FormStatus, Field, inputClass, textareaClass } from "./fields";
-import { ICON_CHOICES } from "@/components/icons";
+import { IconPicker } from "./IconPicker";
 import type { Group } from "@/lib/types";
 
 export function GroupForm({
@@ -97,20 +97,8 @@ export function GroupForm({
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Icon" htmlFor="group-icon" hint="Identifier, not SVG">
-          <select
-            id="group-icon"
-            name="icon"
-            defaultValue={group?.icon ?? ""}
-            className={inputClass}
-          >
-            <option value="">Default (sparkle)</option>
-            {ICON_CHOICES.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
+        <Field label="Icon" htmlFor="group-icon" hint="Bawaan atau upload sendiri">
+          <IconPicker id="group-icon" name="icon" value={group?.icon ?? null} />
         </Field>
 
         <Field label="Sort order" htmlFor="group-order" hint="Lower first">

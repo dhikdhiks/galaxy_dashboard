@@ -58,3 +58,58 @@ export class ValidationError extends Error {
     this.name = "ValidationError";
   }
 }
+
+/* --------------------------------- To-dos --------------------------------- */
+
+export interface Todo {
+  id: string;
+  title: string;
+  /** Scheduled time, null when the todo has no time set. */
+  time: Date | null;
+  sortOrder: number;
+  archived: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Task {
+  id: string;
+  todoId: string;
+  label: string;
+  done: boolean;
+  sortOrder: number;
+  /** Optional link to a skill (skills._id as hex). */
+  skillId: string | null;
+  /** Optional link to a group (groups._id as hex). */
+  groupId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Task enriched with the names of its optional skill/group links. */
+export interface TaskWithLinks extends Task {
+  skillName: string | null;
+  groupSlug: string | null;
+  groupName: string | null;
+}
+
+export interface TodoWithTasks extends Todo {
+  tasks: TaskWithLinks[];
+  doneCount: number;
+}
+
+export interface TodoInput {
+  title: string;
+  time?: Date | null;
+  sortOrder?: number;
+  archived?: boolean;
+}
+
+export interface TaskInput {
+  todoId: string;
+  label: string;
+  done?: boolean;
+  sortOrder?: number;
+  skillId?: string | null;
+  groupId?: string | null;
+}
